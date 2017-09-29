@@ -14,6 +14,7 @@
 
 NSString *const AudioPlayerEventProgress = @"playerProgress";
 NSString *const AudioPlayerEventFinished = @"playerFinished";
+NSString *const AudioPlayerEventError    = @"playerOccurError";
 
 @implementation AudioPlayerManager {
 
@@ -79,6 +80,24 @@ RCT_EXPORT_MODULE();
       @"finished": flag ? @"true" : @"false"
     }];
 }
+- (void)audioPlayerDecodeErrorDidOccur:(AVAudioPlayer *)player error:(NSError *)error{
+  //occur an error when playing...
+  if (_audioPlayer.playing) {
+    [_audioPlayer stop];
+  }
+  [self stopProgressTimer];
+  [self sendProgressUpdate];
+  [self sendErrorNonification:error];
+  
+}
+- (void)sendErrorNonification:(NSError *)error{
+  NSDictionary * dict = @{
+                         @"error" : [error localizedDescription],
+  };
+  NSLog(@"sendErrorNonification",dict);
+  [_bridge.eventDispatcher sendDeviceEventWithName:AudioPlayerEventError body:dict];
+  
+}
 
 RCT_EXPORT_METHOD(play:(NSString *)path options:(NSDictionary *)options)
 {
@@ -93,12 +112,14 @@ RCT_EXPORT_METHOD(play:(NSString *)path options:(NSDictionary *)options)
   _audioPlayer = [[AVAudioPlayer alloc]
     initWithContentsOfURL:_audioFileURL
     error:&error];
+  _audioPlayer.enableRate = YES;
   _audioPlayer.delegate = self;
   _audioPlayer.numberOfLoops = [numberOfLoops integerValue];
 
   if (error) {
     [self stopProgressTimer];
     NSLog(@"audio playback loading error: %@", [error localizedDescription]);
+    [self sendErrorNonification:error];
     // TODO: dispatch error over the bridge
   } else {
     [self startProgressTimer];
@@ -115,12 +136,14 @@ RCT_EXPORT_METHOD(playWithUrl:(NSURL *) url options:(NSDictionary *)options)
   NSNumber *numberOfLoops = [RCTConvert NSNumber:options[@"numberOfLoops"]];
 
   _audioPlayer = [[AVAudioPlayer alloc] initWithData:data  error:&error];
+  _audioPlayer.enableRate = YES;
   _audioPlayer.delegate = self;
   _audioPlayer.numberOfLoops = [numberOfLoops integerValue];
 
   if (error) {
     [self stopProgressTimer];
     NSLog(@"audio playback loading error: %@", [error localizedDescription]);
+    [self sendErrorNonification:error];
     // TODO: dispatch error over the bridge
   } else {
     [self startProgressTimer];
@@ -144,6 +167,11 @@ RCT_EXPORT_METHOD(playWithUrl:(NSURL *) url options:(NSDictionary *)options)
   } else if ([sessionCategory isEqualToString:@"MultiRoute"]) {
     [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryMultiRoute error:nil];
   }
+}
+
+RCT_EXPORT_METHOD(setRate:(float)rt)
+{
+  _audioPlayer.rate = rt;
 }
 
 RCT_EXPORT_METHOD(pause)
@@ -183,12 +211,12 @@ RCT_EXPORT_METHOD(skipToSeconds:(float)position)
         // Rounds down to remove sub-second precision
         position = (int)position;
 
-        // Prevent skipping past end of file
-        if ( position>=(int)_audioPlayer.duration )
-        {
-            NSLog( @"Audio: IGNORING skip to <%.02f> (past EOF) of <%.02f> seconds", position, _audioPlayer.duration );
-            return;
-        }
+//        // Prevent skipping past end of file
+//        if ( position>=(int)_audioPlayer.duration )
+//        {
+//            NSLog( @"Audio: IGNORING skip to <%.02f> (past EOF) of <%.02f> seconds", position, _audioPlayer.duration );
+//            return;
+//        }
 
         // See if playback is active prior to skipping
         BOOL skipWhilePlaying = _audioPlayer.playing;
@@ -209,9 +237,7 @@ RCT_EXPORT_METHOD(skipToSeconds:(float)position)
 
 RCT_EXPORT_METHOD(setCurrentTime:(NSTimeInterval) time)
 {
-  if (_audioPlayer.playing) {
     [_audioPlayer setCurrentTime: time];
-  }
 }
 
 /*
