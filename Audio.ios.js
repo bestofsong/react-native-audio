@@ -40,6 +40,9 @@ var AudioPlayer = {
   unpause: function() {
     AudioPlayerManager.unpause();
   },
+  setRate: function(rate) {
+    AudioPlayerManager.setRate(rate);
+  },
   stop: function() {
     AudioPlayerManager.stop();
   },
@@ -59,10 +62,22 @@ var AudioPlayer = {
       }
     );
   },
+  setPlayingOccurErrorSubscription: function() {
+    if (this.occurErrorSubscription) this.occurErrorSubscription.remove();
+    this.occurErrorSubscription = DeviceEventEmitter.addListener('playerOccurError',
+      (data) => {
+        console.log('播放出错 addListener');
+        if (this.playerOccurError) {
+          this.playerOccurError(data);
+        }
+      }
+    );
+  },
   setFinishedSubscription: function() {
     if (this.finishedSubscription) this.finishedSubscription.remove();
     this.finishedSubscription = DeviceEventEmitter.addListener('playerFinished',
       (data) => {
+        console.log('播放完成 onFinished addListener');
         if (this.onFinished) {
           this.onFinished(data);
         }
